@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chemin minimal — Graphe pondéré</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app layout-grid">
+      <header class="app-header">
+        <h1>Chemin minimal</h1>
+      </header>
+
+      <section class="hud" role="region" aria-label="Tableau de bord">
+        <div class="hud-group timers">
+          <div class="hud-item">
+            <span class="label">Observation</span>
+            <span id="prep-timer" class="value" aria-live="polite">00:45</span>
+          </div>
+          <div class="hud-item">
+            <span class="label">Jeu</span>
+            <span id="game-timer" class="value" aria-live="polite">01:00</span>
+          </div>
+        </div>
+        <div class="hud-group scores">
+          <div class="hud-item">
+            <span class="label">Score</span>
+            <span id="score" class="value" aria-live="polite">0</span>
+          </div>
+          <div class="hud-item">
+            <span class="label">Score optimal</span>
+            <span id="optimal-score" class="value" aria-live="polite">—</span>
+          </div>
+        </div>
+        <div class="hud-group actions">
+          <button id="start-btn" class="btn primary" type="button">Commencer</button>
+          <button id="reset-btn" class="btn" type="button">Réinitialiser</button>
+        </div>
+      </section>
+
+      <section id="status" class="status" aria-live="polite"></section>
+
+      <div class="content">
+        <aside id="sidebar" class="sidebar" aria-label="Joueurs connectés">
+          <h2>Joueurs</h2>
+          <ul id="players-list" class="players-list"></ul>
+        </aside>
+        <main id="board" class="board hidden-values" role="group" aria-label="Terrain du jeu">
+          <!-- Lignes générées dynamiquement -->
+        </main>
+      </div>
+
+      <footer class="app-footer">
+        <small>
+          Règle: partez de la ligne 1 (8 colonnes), puis allez à la ligne suivante dans la même colonne ou une colonne adjacente. Terminez à la ligne 11 (8 colonnes).
+        </small>
+      </footer>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+
+    <!-- Pseudo Modal -->
+    <div id="pseudo-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pseudo-title">
+      <div class="modal-card">
+        <h3 id="pseudo-title">Entrez votre pseudo</h3>
+        <form id="pseudo-form">
+          <input id="pseudo-input" type="text" placeholder="Votre pseudo" minlength="3" maxlength="20" required />
+          <div class="modal-actions">
+            <button type="submit" class="btn primary">Valider</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </body>
+</html>
