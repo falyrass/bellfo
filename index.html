@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app layout-grid">
+  <div class="app">
       <header class="app-header">
         <h1>Chemin minimal</h1>
       </header>
@@ -41,15 +41,9 @@
 
       <section id="status" class="status" aria-live="polite"></section>
 
-      <div class="content">
-        <aside id="sidebar" class="sidebar" aria-label="Joueurs connectés">
-          <h2>Joueurs</h2>
-          <ul id="players-list" class="players-list"></ul>
-        </aside>
-        <main id="board" class="board hidden-values" role="group" aria-label="Terrain du jeu">
-          <!-- Lignes générées dynamiquement -->
-        </main>
-      </div>
+      <main id="board" class="board hidden-values" role="group" aria-label="Terrain du jeu">
+        <!-- Lignes générées dynamiquement -->
+      </main>
 
       <footer class="app-footer">
         <small>
@@ -58,21 +52,7 @@
       </footer>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"></script>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="app.js"></script>
-
-    <!-- Pseudo Modal -->
-    <div id="pseudo-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pseudo-title">
-      <div class="modal-card">
-        <h3 id="pseudo-title">Entrez votre pseudo</h3>
-        <form id="pseudo-form">
-          <input id="pseudo-input" type="text" placeholder="Votre pseudo" minlength="3" maxlength="20" required />
-          <div class="modal-actions">
-            <button type="submit" class="btn primary">Valider</button>
-          </div>
-        </form>
-      </div>
-    </div>
+  <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"></script>
+  <script src="app.js"></script>
   </body>
 </html>

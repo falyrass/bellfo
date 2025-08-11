@@ -30,16 +30,6 @@ body {
 .app-header { display: flex; align-items: baseline; gap: 12px; }
 .app-header h1 { margin: 4px 0 12px; font-weight: 700; letter-spacing: 0.3px; }
 
-/* Layout with sidebar */
-.layout-grid .content { display: grid; grid-template-columns: 260px 1fr; gap: 12px; align-items: start; }
-.sidebar { background: var(--panel); border: 1px solid #22263d; border-radius: 12px; padding: 12px; position: sticky; top: 12px; max-height: calc(100vh - 120px); overflow: auto; }
-.sidebar h2 { margin: 6px 0 8px; font-size: 16px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
-.players-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.players-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-radius: 8px; background: var(--panel-2); border: 1px solid #242947; }
-.players-list .name { font-weight: 600; }
-.players-list .status { font-size: 12px; color: var(--muted); }
-.players-list .score { font-variant-numeric: tabular-nums; font-weight: 700; }
-
 .hud { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid #22263d; border-radius: 12px; padding: 10px 12px; }
 .hud-group { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .hud-item { background: var(--panel-2); border: 1px solid #242947; border-radius: 10px; padding: 8px 10px; min-width: 120px; display: flex; justify-content: space-between; gap: 10px; }
@@ -96,7 +86,6 @@ body {
 /* Responsive tweaks */
 @media (max-width: 900px) {
   .app { padding: 12px; }
-  .layout-grid .content { grid-template-columns: 1fr; }
   .node { width: 40px; height: 40px; font-size: 14px; }
 }
 @media (max-width: 600px) {
@@ -104,10 +93,4 @@ body {
   .node { width: 36px; height: 36px; font-size: 13px; }
 }
 
-/* Modal */
-.modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.45); z-index: 20; }
-.modal.hidden { display: none; }
-.modal-card { width: min(420px, 90vw); background: var(--panel); border: 1px solid #22263d; border-radius: 12px; padding: 16px; }
-.modal-card h3 { margin: 0 0 10px; }
-.modal-card input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #283153; background: #1c2343; color: var(--text); }
-.modal-actions { margin-top: 12px; display: flex; justify-content: flex-end; }
+/* (Modal, sidebar styles removed in single-player mode) */
