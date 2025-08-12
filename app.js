@@ -67,9 +67,46 @@
 
   function onNodeClick(e){ if(state!==GameState.Playing) return; const $btn=$(e.currentTarget); if($btn.hasClass('locked')) return; const r=parseInt($btn.attr('data-row'),10); const c=parseInt($btn.attr('data-col'),10); const p=grid[r][c]; if(!p) return; if(playerPath.length===0){ if(!isTopRow(r)){ invalidClickFeedback($btn); return; } addToPath(p); return; } const last=playerPath[playerPath.length-1]; if(!canMove(last,p)){ invalidClickFeedback($btn); return; } addToPath(p); if(isBottomRow(p.row)) endGame(true,'Bravo, vous avez atteint la ligne 11.'); }
   function invalidClickFeedback($el){ $el.addClass('invalid'); beep(220,0.06,0.03); setTimeout(()=> $el.removeClass('invalid'),220); }
-  function addToPath(p){ p.$el.addClass('active'); if(playerPath.length===0){ playerPath.push(p); playerScore+=p.value; updateScoreUI(); p.$el.addClass('path'); return; } const last=playerPath[playerPath.length-1]; const delta=Math.abs(p.value-last.value); playerScore+=delta; playerPath.push(p); updateScoreUI(); p.$el.addClass('path'); beep(660,0.05,0.02); }
+  function addToPath(p){
+    p.$el.addClass('active');
+    if(playerPath.length===0){
+      // Premier point: on ne compte PAS sa valeur dans le score
+      playerPath.push(p);
+      updateScoreUI();
+      p.$el.addClass('path');
+      return;
+    }
+    const last=playerPath[playerPath.length-1];
+    const delta=Math.abs(p.value-last.value);
+    playerScore+=delta;
+    playerPath.push(p);
+    updateScoreUI();
+    p.$el.addClass('path');
+    beep(660,0.05,0.02);
+  }
 
-  function computeOptimalPath(){ const dp=Array.from({length:ROWS},()=>Array(COLS).fill(null)); for(let c=0;c<COLS;c++){ const p=grid[0][c]; dp[0][c]={cost:p.value,from:null}; } for(let r=1;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const p=grid[r][c]; let best=null; for(let dc=-1;dc<=1;dc++){ const pc=c+dc; if(pc<0||pc>=COLS) continue; const prev=grid[r-1][pc]; const prevDp=dp[r-1][pc]; if(!prev||!prevDp) continue; const cost=prevDp.cost+Math.abs(p.value-prev.value); if(best==null||cost<best.cost){ best={cost,from:{r:r-1,c:pc}}; } } dp[r][c]=best; } } let bestEnd=null,bestEndRC=null; for(let c=0;c<COLS;c++){ const cell=dp[ROWS-1][c]; if(!cell) continue; if(bestEnd==null||cell.cost<bestEnd){ bestEnd=cell.cost; bestEndRC={r:ROWS-1,c}; } } const bestPath=[]; if(bestEndRC){ let cur=bestEndRC; while(cur){ const p=grid[cur.r][cur.c]; bestPath.push(p); const f=dp[cur.r][cur.c].from; cur=f?{r:f.r,c:f.c}:null; } bestPath.reverse(); } return {bestPath,bestScore:bestEnd}; }
+  function computeOptimalPath(){
+    const dp=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+    // Base: le premier point ne coûte rien (score basé uniquement sur les différences)
+    for(let c=0;c<COLS;c++) dp[0][c] = { cost: 0, from: null };
+    for(let r=1;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const p=grid[r][c]; let best=null;
+        for(let dc=-1;dc<=1;dc++){
+          const pc=c+dc; if(pc<0||pc>=COLS) continue;
+          const prev=grid[r-1][pc]; const prevDp=dp[r-1][pc]; if(!prev||!prevDp) continue;
+          const cost=prevDp.cost + Math.abs(p.value - prev.value);
+          if(best==null || cost<best.cost) best={ cost, from:{ r:r-1, c:pc } };
+        }
+        dp[r][c]=best;
+      }
+    }
+    let bestEnd=null,bestEndRC=null;
+    for(let c=0;c<COLS;c++){ const cell=dp[ROWS-1][c]; if(!cell) continue; if(bestEnd==null||cell.cost<bestEnd){ bestEnd=cell.cost; bestEndRC={r:ROWS-1,c}; } }
+    const bestPath=[];
+    if(bestEndRC){ let cur=bestEndRC; while(cur){ const p=grid[cur.r][cur.c]; bestPath.push(p); const f=dp[cur.r][cur.c].from; cur=f?{r:f.r,c:f.c}:null; } bestPath.reverse(); }
+    return {bestPath,bestScore:bestEnd};
+  }
 
   function resetGame(){ clearAllTimers(); state=GameState.Idle; generateGrid(); assignValues(); resetTimersUI(); setStatus('Cliquez sur Commencer pour lancer une nouvelle partie.'); showNumbers(false); lockBoardInteractions(true); }
   function startGame(){ if(state===GameState.Preparing||state===GameState.Playing) return; clearPathHighlights(); startPreparationPhase(); }
