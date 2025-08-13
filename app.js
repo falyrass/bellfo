@@ -12,7 +12,7 @@
 
   const ROWS = 11;
   const COLS = 8;
-  const PREP_SECONDS = 1;
+  const PREP_SECONDS = 45;
   const GAME_SECONDS = 60;
 
   const GameState = Object.freeze({ Idle: 'idle', Preparing: 'preparing', Playing: 'playing', Ended: 'ended' });
