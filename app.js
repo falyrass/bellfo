@@ -12,7 +12,7 @@
 
   const ROWS = 11;
   const COLS = 8;
-  const PREP_SECONDS = 45;
+  const PREP_SECONDS = 1;
   const GAME_SECONDS = 60;
 
   const GameState = Object.freeze({ Idle: 'idle', Preparing: 'preparing', Playing: 'playing', Ended: 'ended' });
@@ -27,6 +27,13 @@
   let prepTimer = null, gameTimer = null;
   let prepRemaining = PREP_SECONDS, gameRemaining = GAME_SECONDS;
   let soundCtx = null;
+
+  // Met à jour l'état des boutons (Start / Reset)
+  function refreshButtons(){
+    const disabled = (state === GameState.Preparing || state === GameState.Playing);
+    $('#start-btn').prop('disabled', disabled);
+    $('#reset-btn').prop('disabled', disabled);
+  }
 
   const range = (n)=>Array.from({length:n},(_,i)=>i);
   const shuffle = (a)=>{ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -61,28 +68,62 @@
   function assignValues(){ const total=ROWS*COLS; usedValues=shuffle(range(total).map(i=>i+1)); let k=0; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const p=grid[r][c]; const v=usedValues[k++]; p.value=v; p.$el.text(String(v)); } } }
 
   function clearAllTimers(){ if(prepTimer){clearInterval(prepTimer);prepTimer=null;} if(gameTimer){clearInterval(gameTimer);gameTimer=null;} }
-  function startPreparationPhase(){ state=GameState.Preparing; setStatus(`Observation: mémorisez les valeurs (${PREP_SECONDS} s).`,'warn'); showNumbers(true); lockBoardInteractions(true); prepRemaining=PREP_SECONDS; gameRemaining=GAME_SECONDS; updateTimersUI(); prepTimer=setInterval(()=>{ prepRemaining--; updateTimersUI(); if(prepRemaining<=0){ clearInterval(prepTimer); prepTimer=null; startPlayingPhase(); } },1000); }
-  function startPlayingPhase(){ state=GameState.Playing; setStatus('C’est parti ! Sélectionnez un point de la ligne 1.','ok'); showNumbers(true); lockBoardInteractions(false); gameRemaining=GAME_SECONDS; updateTimersUI(); gameTimer=setInterval(()=>{ gameRemaining--; updateTimersUI(); if(gameRemaining<=0){ clearInterval(gameTimer); gameTimer=null; endGame(false,'Temps écoulé.'); } },1000); }
-  function endGame(reached,msg){ if(state===GameState.Ended) return; state=GameState.Ended; clearAllTimers(); lockBoardInteractions(true); const {bestPath,bestScore}=computeOptimalPath(); updateOptimalScoreUI(bestScore); $('#board .node').removeClass('active'); for(const p of playerPath) p.$el.addClass('path'); for(const p of bestPath) p.$el.addClass('optimal'); if(reached) setStatus(`${msg||'Arrivée atteinte !'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`); else setStatus(`${msg||'Partie terminée.'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`,'warn'); }
+  function startPreparationPhase(){
+    state=GameState.Preparing;
+    setStatus(`Observation: mémorisez les valeurs (${PREP_SECONDS} s).`,'warn');
+    showNumbers(true);
+    lockBoardInteractions(true);
+    prepRemaining=PREP_SECONDS; gameRemaining=GAME_SECONDS; updateTimersUI();
+    refreshButtons();
+    prepTimer=setInterval(()=>{ prepRemaining--; updateTimersUI(); if(prepRemaining<=0){ clearInterval(prepTimer); prepTimer=null; startPlayingPhase(); } },1000);
+  }
+  function startPlayingPhase(){
+    state=GameState.Playing;
+    setStatus('C’est parti ! Sélectionnez un point de la ligne 1.','ok');
+    showNumbers(true);
+    lockBoardInteractions(false);
+    gameRemaining=GAME_SECONDS; updateTimersUI();
+    refreshButtons();
+    gameTimer=setInterval(()=>{ gameRemaining--; updateTimersUI(); if(gameRemaining<=0){ clearInterval(gameTimer); gameTimer=null; endGame(false,'Temps écoulé.'); } },1000);
+  }
+  function endGame(reached,msg){
+    if(state===GameState.Ended) return;
+    state=GameState.Ended;
+    clearAllTimers();
+    lockBoardInteractions(true);
+    const {bestPath,bestScore}=computeOptimalPath();
+    updateOptimalScoreUI(bestScore);
+    $('#board .node').removeClass('active');
+    for(const p of playerPath) p.$el.addClass('path');
+    for(const p of bestPath) p.$el.addClass('optimal');
+    if(reached) setStatus(`${msg||'Arrivée atteinte !'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`);
+    else setStatus(`${msg||'Partie terminée.'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`,'warn');
+    refreshButtons(); // Réactiver les boutons en fin de partie
+  }
 
   function onNodeClick(e){ if(state!==GameState.Playing) return; const $btn=$(e.currentTarget); if($btn.hasClass('locked')) return; const r=parseInt($btn.attr('data-row'),10); const c=parseInt($btn.attr('data-col'),10); const p=grid[r][c]; if(!p) return; if(playerPath.length===0){ if(!isTopRow(r)){ invalidClickFeedback($btn); return; } addToPath(p); return; } const last=playerPath[playerPath.length-1]; if(!canMove(last,p)){ invalidClickFeedback($btn); return; } addToPath(p); if(isBottomRow(p.row)) endGame(true,'Bravo, vous avez atteint la ligne 11.'); }
   function invalidClickFeedback($el){ $el.addClass('invalid'); beep(220,0.06,0.03); setTimeout(()=> $el.removeClass('invalid'),220); }
   function addToPath(p){
     p.$el.addClass('active');
     if(playerPath.length===0){
-      // Premier point: on ne compte PAS sa valeur dans le score
+      // Premier point: pas de valeur ajoutée au score
       playerPath.push(p);
       updateScoreUI();
       p.$el.addClass('path');
-      return;
+    } else {
+      const last=playerPath[playerPath.length-1];
+      const delta=Math.abs(p.value-last.value);
+      playerScore+=delta;
+      playerPath.push(p);
+      updateScoreUI();
+      p.$el.addClass('path');
     }
-    const last=playerPath[playerPath.length-1];
-    const delta=Math.abs(p.value-last.value);
-    playerScore+=delta;
-    playerPath.push(p);
-    updateScoreUI();
-    p.$el.addClass('path');
-    beep(660,0.05,0.02);
+    // Son joué pour chaque point (y compris le premier)
+    try {
+      const audio = new Audio('assets/sounds/90s-game-ui-10-185103.mp3');
+      audio.currentTime = 0;
+      audio.play().catch(()=>{});
+    } catch(_) { /* ignore */ }
   }
 
   function computeOptimalPath(){
@@ -108,11 +149,18 @@
     return {bestPath,bestScore:bestEnd};
   }
 
-  function resetGame(){ clearAllTimers(); state=GameState.Idle; generateGrid(); assignValues(); resetTimersUI(); setStatus('Cliquez sur Commencer pour lancer une nouvelle partie.'); showNumbers(false); lockBoardInteractions(true); }
+  function resetGame(){
+    clearAllTimers();
+    state=GameState.Idle;
+    generateGrid(); assignValues(); resetTimersUI();
+    setStatus('Cliquez sur Commencer pour lancer une nouvelle partie.');
+    showNumbers(false); lockBoardInteractions(true);
+    refreshButtons();
+  }
   function startGame(){ if(state===GameState.Preparing||state===GameState.Playing) return; clearPathHighlights(); startPreparationPhase(); }
 
   function bindEvents(){ $('#board').on('click','.node',onNodeClick); $('#start-btn').on('click',startGame); $('#reset-btn').on('click',()=> resetGame()); }
 
-  $(function(){ bindEvents(); resetGame(); const $legend=$('<div class="legend">').append('<span class="badge"><span class="dot player"></span> Votre chemin</span>').append('<span class="badge"><span class="dot opt"></span> Chemin optimal</span>'); $('.board').after($legend); });
+  $(function(){ bindEvents(); resetGame(); const $legend=$('<div class="legend">').append('<span class="badge"><span class="dot player"></span> Votre chemin</span>').append('<span class="badge"><span class="dot opt"></span> Chemin optimal</span>'); $('.board').after($legend); refreshButtons(); });
 
 })(jQuery);
