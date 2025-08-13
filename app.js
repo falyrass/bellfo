@@ -51,9 +51,12 @@
 
   // Met à jour l'état des boutons (Start / Reset)
   function refreshButtons(){
-    const disabled = (state === GameState.Preparing || state === GameState.Playing);
-    $('#start-btn').prop('disabled', disabled);
-    $('#reset-btn').prop('disabled', disabled);
+  // Start (Commencer) visible seulement en état Idle
+  const showStart = (state === GameState.Idle);
+  $('#start-btn').toggle(showStart);
+  // Reset désactivé seulement pendant préparation ou jeu, actif en Idle et Ended
+  const resetDisabled = (state === GameState.Preparing || state === GameState.Playing);
+  $('#reset-btn').prop('disabled', resetDisabled);
   }
 
   const range = (n)=>Array.from({length:n},(_,i)=>i);
@@ -96,7 +99,18 @@
     lockBoardInteractions(true);
     prepRemaining=PREP_SECONDS; gameRemaining=GAME_SECONDS; updateTimersUI();
     refreshButtons();
-    prepTimer=setInterval(()=>{ prepRemaining--; updateTimersUI(); if(prepRemaining<=0){ clearInterval(prepTimer); prepTimer=null; startPlayingPhase(); } },1000);
+  // Nettoie overlay précédent s'il existe (pas d'affichage géant avant <=5s)
+  $('#board .prep-overlay').remove();
+    prepTimer=setInterval(()=>{ 
+      prepRemaining--; 
+      updateTimersUI();
+      if(prepRemaining<=5 && prepRemaining>0){ showPrepCountdown(prepRemaining); }
+      if(prepRemaining<=0){ 
+        clearInterval(prepTimer); prepTimer=null; 
+        removePrepCountdown();
+        startPlayingPhase(); 
+      }
+    },1000);
   }
   function startPlayingPhase(){
     state=GameState.Playing;
@@ -105,13 +119,29 @@
     lockBoardInteractions(false);
     gameRemaining=GAME_SECONDS; updateTimersUI();
     refreshButtons();
-    gameTimer=setInterval(()=>{ gameRemaining--; updateTimersUI(); if(gameRemaining<=0){ clearInterval(gameTimer); gameTimer=null; endGame(false,'Temps écoulé.'); } },1000);
+  // Affiche "GO" juste après la phase de préparation
+  showGoMessage();
+    gameTimer=setInterval(()=>{ 
+      gameRemaining--; 
+      updateTimersUI(); 
+      if(gameRemaining<=5 && gameRemaining>0){ showGameCountdown(gameRemaining); }
+      if(gameRemaining<=0){ 
+        clearInterval(gameTimer); gameTimer=null; 
+        removeGameCountdown();
+        endGame(false,'Temps écoulé.'); 
+      } 
+    },1000);
   }
   function endGame(reached,msg){
     if(state===GameState.Ended) return;
     state=GameState.Ended;
     clearAllTimers();
     lockBoardInteractions(true);
+    // Si le joueur n'a pas atteint la dernière ligne, score forcé à 0 avant toute évaluation
+    if(!reached){
+      playerScore = 0;
+      updateScoreUI();
+    }
     const {bestPath,bestScore}=computeOptimalPath();
     updateOptimalScoreUI(bestScore);
     $('#board .node').removeClass('active');
@@ -120,9 +150,11 @@
     if(reached) setStatus(`${msg||'Arrivée atteinte !'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`);
     else setStatus(`${msg||'Partie terminée.'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`,'warn');
     refreshButtons(); // Réactiver les boutons en fin de partie
+  // Evaluation étoiles (7s)
+  try { createStarEvaluation(playerScore, bestScore); } catch(_) { /* ignore */ }
   }
 
-  function onNodeClick(e){ if(state!==GameState.Playing) return; const $btn=$(e.currentTarget); if($btn.hasClass('locked')) return; const r=parseInt($btn.attr('data-row'),10); const c=parseInt($btn.attr('data-col'),10); const p=grid[r][c]; if(!p) return; if(playerPath.length===0){ if(!isTopRow(r)){ invalidClickFeedback($btn); return; } addToPath(p); return; } const last=playerPath[playerPath.length-1]; if(!canMove(last,p)){ invalidClickFeedback($btn); return; } addToPath(p); if(isBottomRow(p.row)) endGame(true,'Bravo, vous avez atteint la ligne 11.'); }
+  function onNodeClick(e){ if(state!==GameState.Playing) return; const $btn=$(e.currentTarget); if($btn.hasClass('locked')) return; const r=parseInt($btn.attr('data-row'),10); const c=parseInt($btn.attr('data-col'),10); const p=grid[r][c]; if(!p) return; if(playerPath.length===0){ if(!isTopRow(r)){ invalidClickFeedback($btn); return; } addToPath(p); return; } const last=playerPath[playerPath.length-1]; if(!canMove(last,p)){ invalidClickFeedback($btn); return; } addToPath(p); if(isBottomRow(p.row)) endGame(true,'Bravo.'); }
   function invalidClickFeedback($el){ $el.addClass('invalid'); beep(220,0.06,0.03); setTimeout(()=> $el.removeClass('invalid'),220); }
   function addToPath(p){
     p.$el.addClass('active');
@@ -186,9 +218,59 @@
     generateGrid(); assignValues(); resetTimersUI();
     setStatus('Cliquez sur Commencer pour lancer une nouvelle partie.');
     showNumbers(false); lockBoardInteractions(true);
+  removePrepCountdown();
     refreshButtons();
   }
   function startGame(){ if(state===GameState.Preparing||state===GameState.Playing) return; clearPathHighlights(); startPreparationPhase(); }
+
+  // Crée et affiche l'overlay d'évaluation avec étoiles selon l'écart de score
+  function createStarEvaluation(score, optimal){
+    if(optimal == null) return; // sécurité
+  // Différence absolue entre le score joueur et l'optimal
+  const diff = Math.abs(score - optimal);
+    let stars=0;
+    if(diff===0) stars=3; else if(diff>=1 && diff<=30) stars=2; else if(diff>=31 && diff<=60) stars=1; else stars=0;
+    // Construire overlay
+    const $overlay = $('<div class="star-eval-overlay" aria-hidden="true">');
+    const $box = $('<div class="star-eval-box">');
+    const $starsWrap = $('<div class="star-eval-stars" role="img" aria-label="Évaluation: '+stars+' étoile(s)">');
+    const starSVG = (filled, delay)=>`<svg class="star ${filled?'filled glow':''}" viewBox="0 0 64 64" style="animation-delay:${delay}ms"><polygon points="32 4 40.9 22.6 61 25.3 46 39.4 49.8 59.5 32 49.4 14.2 59.5 18 39.4 3 25.3 23.1 22.6 32 4"/></svg>`;
+    for(let i=0;i<3;i++){ $starsWrap.append(starSVG(i<stars, i*260)); }
+    const titleMap={0:'Aucun éclat',1:'Peut mieux faire',2:'Très bien',3:'Parfait !'};
+    const $title=$('<h2 class="star-eval-title">').text(titleMap[stars]);
+    const $sub=$('<p class="star-eval-sub">').text(stars===3 ? 'Chemin optimal atteint.' : 'Écart avec l\'optimal: '+diff);
+    const $diff=$('<p class="star-eval-diff">').text('Score: '+score+' | Optimal: '+optimal);
+    $box.append($starsWrap,$title,$sub,$diff);
+    $overlay.append($box);
+    $('body').append($overlay);
+  // Retrait après 7s
+  setTimeout(()=>{ $overlay.remove(); }, 7000);
+  }
+
+  // === Overlays de préparation ===
+  function showPrepCountdown(n){
+    removePrepCountdown();
+    if(n<=0) return;
+    const $ov = $('<div class="prep-overlay" aria-hidden="true">').append('<span>'+n+'</span>');
+    $('#board').append($ov);
+  }
+  function removePrepCountdown(){ $('#board .prep-overlay').remove(); }
+  function showGoMessage(){
+    removePrepCountdown();
+    const $ov = $('<div class="prep-overlay go" aria-hidden="true">').append('<span>GO</span>');
+    $('#board').append($ov);
+  setTimeout(()=>{ $ov.remove(); },1500);
+  }
+
+  // === Compte à rebours final de la phase de jeu (5 dernières secondes) ===
+  function showGameCountdown(n){
+    removeGameCountdown();
+    if(n<=0) return;
+    // Réutilise le style existant .prep-overlay
+    const $ov = $('<div class="prep-overlay game" aria-hidden="true">').append('<span>'+n+'</span>');
+    $('#board').append($ov);
+  }
+  function removeGameCountdown(){ $('#board .prep-overlay.game').remove(); }
 
   function bindEvents(){ $('#board').on('click','.node',onNodeClick); $('#start-btn').on('click',startGame); $('#reset-btn').on('click',()=> resetGame()); }
 
@@ -196,11 +278,26 @@
     preloadClickSound();
     bindEvents();
     resetGame();
+    initRulesModal();
     const $legend=$('<div class="legend">')
       .append('<span class="badge"><span class="dot player"></span> Votre chemin</span>')
       .append('<span class="badge"><span class="dot opt"></span> Chemin optimal</span>');
     $('.board').after($legend);
     refreshButtons();
   });
+
+  // ====== Règles / Modale ======
+  function initRulesModal(){
+    const KEY='hideRules';
+    const hide = localStorage.getItem(KEY)==='1';
+    const $modal = $('#rules-modal');
+    const $ok = $('#rules-ok-btn');
+    const $chk = $('#rules-hide-checkbox');
+    $('#show-rules-btn').on('click',()=>{ showRules(); });
+    $ok.on('click',()=>{ if($chk.is(':checked')) localStorage.setItem(KEY,'1'); hideRules(); });
+    function showRules(){ $modal.removeClass('hidden'); }
+    function hideRules(){ $modal.addClass('hidden'); }
+    if(!hide) showRules();
+  }
 
 })(jQuery);
