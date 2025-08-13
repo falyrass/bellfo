@@ -12,7 +12,7 @@
 
   const ROWS = 11;
   const COLS = 8;
-  const PREP_SECONDS = 45;
+  const PREP_SECONDS = 1;
   const GAME_SECONDS = 60;
 
   const GameState = Object.freeze({ Idle: 'idle', Preparing: 'preparing', Playing: 'playing', Ended: 'ended' });
@@ -27,6 +27,27 @@
   let prepTimer = null, gameTimer = null;
   let prepRemaining = PREP_SECONDS, gameRemaining = GAME_SECONDS;
   let soundCtx = null;
+  // Audio préchargé
+  const CLICK_SOUND_URL = 'assets/sounds/pop-cartoon-328167.mp3';
+  let clickAudio = null; // instance principale
+
+  function preloadClickSound(){
+    try {
+      clickAudio = new Audio(CLICK_SOUND_URL);
+      clickAudio.preload = 'auto';
+      clickAudio.load();
+    } catch(_) { /* ignore */ }
+  }
+
+  function playClickSound(){
+    if(!clickAudio){ return; }
+    try {
+      // Pour permettre plusieurs lectures rapprochées sans attendre la fin,
+      // on clone le node (sinon currentTime=0 peut être bloqué si en cours de lecture)
+      const node = clickAudio.cloneNode();
+      node.play().catch(()=>{});
+    } catch(_) { /* ignore */ }
+  }
 
   // Met à jour l'état des boutons (Start / Reset)
   function refreshButtons(){
@@ -117,13 +138,23 @@
       playerPath.push(p);
       updateScoreUI();
       p.$el.addClass('path');
+      // Animation visuelle du delta de score
+      try {
+        const off = p.$el.offset();
+        const $board = $('#board');
+        const boardOff = $board.offset();
+        if(off && boardOff){
+          const x = off.left - boardOff.left + p.$el.outerWidth()/2;
+          const y = off.top - boardOff.top;
+          const $fx = $('<div class="score-float">').text('+'+delta);
+          $fx.css({ left: x + 'px', top: y + 'px' });
+          $board.append($fx);
+          setTimeout(()=> $fx.remove(), 950);
+        }
+      } catch(_) { /* ignore */ }
     }
-    // Son joué pour chaque point (y compris le premier)
-    try {
-      const audio = new Audio('assets/sounds/90s-game-ui-10-185103.mp3');
-      audio.currentTime = 0;
-      audio.play().catch(()=>{});
-    } catch(_) { /* ignore */ }
+  // Son joué pour chaque point (y compris le premier) depuis le cache
+  playClickSound();
   }
 
   function computeOptimalPath(){
@@ -161,6 +192,15 @@
 
   function bindEvents(){ $('#board').on('click','.node',onNodeClick); $('#start-btn').on('click',startGame); $('#reset-btn').on('click',()=> resetGame()); }
 
-  $(function(){ bindEvents(); resetGame(); const $legend=$('<div class="legend">').append('<span class="badge"><span class="dot player"></span> Votre chemin</span>').append('<span class="badge"><span class="dot opt"></span> Chemin optimal</span>'); $('.board').after($legend); refreshButtons(); });
+  $(function(){
+    preloadClickSound();
+    bindEvents();
+    resetGame();
+    const $legend=$('<div class="legend">')
+      .append('<span class="badge"><span class="dot player"></span> Votre chemin</span>')
+      .append('<span class="badge"><span class="dot opt"></span> Chemin optimal</span>');
+    $('.board').after($legend);
+    refreshButtons();
+  });
 
 })(jQuery);

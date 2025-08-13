@@ -56,7 +56,11 @@ body {
 /* Cells serve as grid slots to center nodes (always visible with 8 columns everywhere) */
 .cell { display: flex; align-items: center; justify-content: center; }
 
-.node { width: 44px; height: 44px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text); background: var(--node); border: 1px solid #2a2f52; box-shadow: 0 3px 0 rgba(0,0,0,0.25), inset 0 -4px 0 rgba(0,0,0,0.2); cursor: pointer; user-select: none; transition: background 0.15s ease, transform 0.05s ease, border 0.2s ease, box-shadow 0.2s ease; }
+.node { 
+  /* Responsive sizing: s'adapte à la largeur du viewport tout en étant borné */
+  width: clamp(30px, calc((100vw - 64px - 7*var(--grid-gap)) / 8), 44px);
+  height: clamp(30px, calc((100vw - 64px - 7*var(--grid-gap)) / 8), 44px);
+  border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text); background: var(--node); border: 1px solid #2a2f52; box-shadow: 0 3px 0 rgba(0,0,0,0.25), inset 0 -4px 0 rgba(0,0,0,0.2); cursor: pointer; user-select: none; transition: background 0.15s ease, transform 0.05s ease, border 0.2s ease, box-shadow 0.2s ease; }
 .node:hover { background: var(--node-hover); }
 .node:active { transform: translateY(1px); }
 
@@ -67,6 +71,11 @@ body {
 .node.active { border-color: #6b9af2; background: linear-gradient(180deg, #3b4ea5, #293057); }
 .node.path { background: linear-gradient(180deg, #218d6f, #1b3f3a); border-color: #2ed5a7; }
 .node.optimal { background: linear-gradient(180deg, #caa649, #3f3215); border-color: #e9c46a; color: #0e0f14; }
+
+/* Score delta animation */
+.score-float { position: absolute; pointer-events: none; font-size: 40px; font-weight: 600; color: var(--accent); opacity: 0; transform: translate(-50%, 6px); left: 0; top: 0; animation: scoreFloat 900ms ease forwards; text-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+.score-float.neg { color: var(--danger); }
+@keyframes scoreFloat { 0% { opacity: 0; transform: translate(-50%, 6px) scale(.9); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -22px) scale(.9); } }
 
 /* Legend badges */
 .legend { display: flex; gap: 10px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 12px; }
@@ -84,13 +93,10 @@ body {
 }
 
 /* Responsive tweaks */
-@media (max-width: 900px) {
-  .app { padding: 12px; }
-  .node { width: 40px; height: 40px; font-size: 14px; }
-}
-@media (max-width: 600px) {
-  .hud { grid-template-columns: 1fr; }
-  .node { width: 36px; height: 36px; font-size: 13px; }
-}
+@media (max-width: 900px) { .app { padding: 12px; } .node { font-size: 14px; } }
+@media (max-width: 600px) { .hud { grid-template-columns: 1fr; } .node { font-size: 13px; } }
+
+/* Sécurité supplémentaire: si malgré tout une ligne déborde, on réduit encore l'écart */
+@media (max-width: 430px) { .row { gap: 6px; } }
 
 /* (Modal, sidebar styles removed in single-player mode) */
