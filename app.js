@@ -29,24 +29,65 @@
   let soundCtx = null;
   // Audio préchargé
   const CLICK_SOUND_URL = 'assets/sounds/pop-cartoon-328167.mp3';
+  const HIGH_DIFF_SOUND_URL = 'assets/sounds/mixkit-cartoon-toy-whistle-616.mp3';
   let clickAudio = null; // instance principale
+  let highDiffAudio = null; // son pour grands deltas
+  // Musique de fond
+  const BG_MUSIC_URL = 'assets/sounds/happy-relaxing-loop-275536.mp3'; // fichier fourni (déplacé sous sounds)
+  const FAIL_JINGLE_URL = 'assets/sounds/panto-clowns-jingle-271283.mp3'; // jingle échec
+  const SUCCESS_JINGLE_URL = 'assets/sounds/brass-fanfare-with-timpani-and-winchimes-reverberated-146260.mp3'; // jingle succès parfait
+  let bgMusic = null;
+  let bgMusicStarted = false;
+  const BG_BASE_VOLUME = 0.35;
+  let bgMuted = false;
+  let failJingle = null;
+  let failJinglePlaying = false;
+  let successJingle = null;
+  let successJinglePlaying = false;
 
   function preloadClickSound(){
     try {
       clickAudio = new Audio(CLICK_SOUND_URL);
       clickAudio.preload = 'auto';
       clickAudio.load();
-    } catch(_) { /* ignore */ }
-  }
-
-  function playClickSound(){
-    if(!clickAudio){ return; }
-    try {
+      highDiffAudio = new Audio(HIGH_DIFF_SOUND_URL);
+      highDiffAudio.preload = 'auto';
+      highDiffAudio.load();
       // Pour permettre plusieurs lectures rapprochées sans attendre la fin,
       // on clone le node (sinon currentTime=0 peut être bloqué si en cours de lecture)
       const node = clickAudio.cloneNode();
       node.play().catch(()=>{});
     } catch(_) { /* ignore */ }
+  }
+
+  // Lecture du son de clic (fonction manquante qui causait une erreur JS stoppant la mise à jour des surbrillances)
+  function playClickSound(){
+    if(!clickAudio) return;
+    try {
+      const n = clickAudio.cloneNode();
+      n.currentTime = 0;
+      n.play().catch(()=>{});
+    } catch(_) { /* ignore */ }
+  }
+
+  function playHighDiffSound(){
+    if(!highDiffAudio){ playClickSound(); return; }
+    try {
+      const node = highDiffAudio.cloneNode();
+      node.play().catch(()=>{});
+    } catch(_) { /* ignore */ }
+  }
+
+  function playMoveSound(delta){
+    if(delta==null){ // premier point
+      playClickSound();
+      return;
+    }
+    if(delta > 40){
+      playHighDiffSound();
+    } else {
+      playClickSound();
+    }
   }
 
   // Bouton principal unique (Nouvelle partie / Commencer)
@@ -99,7 +140,7 @@
     state=GameState.Preparing;
     setStatus(`Observation: mémorisez les valeurs (${PREP_SECONDS} s).`,'warn');
     showNumbers(true);
-  applyRevealSpiral();
+  // (animation de révélation supprimée)
     lockBoardInteractions(true);
     prepRemaining=PREP_SECONDS; gameRemaining=GAME_SECONDS; updateTimersUI();
   updateMainButton();
@@ -192,8 +233,8 @@
         }
       } catch(_) { /* ignore */ }
     }
-  // Son joué pour chaque point (y compris le premier) depuis le cache
-  playClickSound();
+  // Son conditionnel selon delta (si premier point delta=null)
+  playMoveSound(playerPath.length<2?null:Math.abs(p.value - playerPath[playerPath.length-2].value));
   if(state===GameState.Playing && !isBottomRow(p.row)) updateClickableHighlights();
   }
 
@@ -228,6 +269,17 @@
     showNumbers(false); lockBoardInteractions(true);
   clearClickable();
   removePrepCountdown();
+  removeGameCountdown();
+  $('.star-eval-overlay').remove();
+  // Stop jingles & remettre musique de fond
+  try {
+    if(failJingle && failJinglePlaying){ failJingle.pause(); failJingle.currentTime = 0; failJinglePlaying = false; }
+    if(successJingle && successJinglePlaying){ successJingle.pause(); successJingle.currentTime = 0; successJinglePlaying = false; }
+    if(bgMusic && bgMusicStarted && !bgMuted){
+      bgMusic.volume = BG_BASE_VOLUME;
+      const p = bgMusic.play(); if(p && p.catch) p.catch(()=>{});
+    }
+  } catch(_) { /* ignore */ }
   updateMainButton();
   }
 
@@ -253,6 +305,14 @@
     $('body').append($overlay);
   // Retrait après 7s
   setTimeout(()=>{ $overlay.remove(); }, 7000);
+  // Jingles spéciaux
+  try {
+    if(stars===3){
+      playSuccessJingle();
+    } else if(stars===0){
+      playFailureJingle();
+    }
+  } catch(_) { /* ignore */ }
   }
 
   // === Overlays de préparation ===
@@ -300,27 +360,18 @@
   function removeGameCountdown(){ $('#board .prep-overlay.game').remove(); }
 
   // ===== Animation spiral reveal =====
-  function applyRevealSpiral(){ // renommé conceptuellement: maintenant flip 3D
-    const $nodes = $('#board .node');
-    $nodes.each(function(i){
-      const el = this;
-      el.classList.remove('reveal-spiral','reveal-zoom','reveal-flip3d','reveal-stagger');
-      // force reflow to restart animation if rejoué
-      void el.offsetWidth;
-      el.style.setProperty('--reveal-order', i.toString());
-      el.classList.add('reveal-flip3d','reveal-stagger');
-    });
-  }
+  // (fonction d'animation supprimée)
 
   // (centrage/fixation retiré)
 
   function bindEvents(){
     $('#board').on('click','.node',onNodeClick);
     $(document).on('click','#main-btn',onMainButtonClick);
+  $(document).on('click','#music-toggle',onMusicToggleClick);
   }
 
   function onMainButtonClick(){
-    if(state !== GameState.Idle) return;
+  if(state !== GameState.Idle && state !== GameState.Ended) return;
     if(buttonPhase === 'new'){
       // Génère une nouvelle grille et passe à phase Commencer
       resetGame();
@@ -328,6 +379,7 @@
       updateMainButton();
     } else if(buttonPhase === 'start') {
       startPreparationPhase();
+  startBackgroundMusic();
     }
   }
 
@@ -336,6 +388,8 @@
     bindEvents();
     resetGame();
     initRulesModal();
+  initBackgroundMusic();
+  // La musique démarrera au clic sur Commencer
   // Bouton unique: d'abord "Nouvelle partie" -> clique régénère + passe à "Commencer" -> lance observation
     const $legend=$('<div class="legend">')
       .append('<span class="badge"><span class="dot player"></span> Votre chemin</span>')
@@ -356,6 +410,169 @@
     function showRules(){ $modal.removeClass('hidden'); }
     function hideRules(){ $modal.addClass('hidden'); }
     if(!hide) showRules();
+  }
+
+  // ===== Musique de fond =====
+  function initBackgroundMusic(){
+    try {
+      bgMuted = localStorage.getItem('bgMuted') === '1';
+      bgMusic = new Audio(BG_MUSIC_URL);
+      bgMusic.loop = true;
+      bgMusic.preload = 'auto';
+      bgMusic.volume = bgMuted ? 0 : BG_BASE_VOLUME;
+      // Préchargement silencieux (certains navigateurs n'autoriseront pas play sans interaction)
+      bgMusic.load();
+  // Précharge jingle échec
+  failJingle = new Audio(FAIL_JINGLE_URL);
+  failJingle.preload = 'auto';
+  failJingle.load();
+  // Précharge jingle succès
+  successJingle = new Audio(SUCCESS_JINGLE_URL);
+  successJingle.preload = 'auto';
+  successJingle.load();
+      updateMusicToggleUI();
+    } catch(_) { /* ignore */ }
+  }
+  function startBackgroundMusic(){
+    if(!bgMusic || bgMusicStarted || bgMuted) return;
+    bgMusicStarted = true;
+    fadeToVolume(BG_BASE_VOLUME, 600);
+    const p = bgMusic.play();
+    if(p && typeof p.then==='function'){
+      p.catch(()=>{ bgMusicStarted=false; });
+    }
+  }
+  function onMusicToggleClick(){
+    if(!bgMusic) return;
+    if(bgMuted){
+      bgMuted = false;
+      localStorage.setItem('bgMuted','0');
+      if(!bgMusicStarted){ startBackgroundMusic(); }
+      fadeToVolume(BG_BASE_VOLUME,500);
+    } else {
+      bgMuted = true;
+      localStorage.setItem('bgMuted','1');
+      fadeToVolume(0,450);
+    }
+    updateMusicToggleUI();
+  }
+  function updateMusicToggleUI(){
+    const $btn = $('#music-toggle');
+    if(!$btn.length) return;
+    $btn.toggleClass('muted', bgMuted);
+    $btn.attr('aria-pressed', !bgMuted);
+    $btn.attr('title', bgMuted ? 'Musique coupée' : 'Musique activée');
+  }
+  function fadeToVolume(target, duration){
+    if(!bgMusic) return;
+    const startVol = bgMusic.volume;
+    const delta = target - startVol;
+    if(Math.abs(delta) < 0.005){ bgMusic.volume = target; return; }
+    const steps = Math.max(10, Math.round(duration/40));
+    let i=0;
+    const interval = setInterval(()=>{
+      i++;
+      const t = i/steps;
+      bgMusic.volume = +(startVol + delta * t).toFixed(3);
+      if(i>=steps){
+        clearInterval(interval);
+        bgMusic.volume = target;
+        if(target===0 && bgMuted){ try{ bgMusic.pause(); bgMusicStarted=false; }catch(_){} }
+      }
+    }, duration/steps);
+  }
+
+  // ===== Jingle échec (0 étoile) =====
+  function playFailureJingle(){
+    if(!failJingle || failJinglePlaying) return;
+    failJinglePlaying = true;
+    // Baisse / pause musique de fond temporairement si active et non mutée
+    let resumeNeeded = false;
+    if(bgMusic && bgMusicStarted && !bgMuted){
+      resumeNeeded = true;
+      // Fade out manuel rapide puis pause
+      const startV = bgMusic.volume;
+      const fadeDur = 400;
+      const steps = 12;
+      let i=0;
+      const iv = setInterval(()=>{
+        i++;
+        const t=i/steps;
+        bgMusic.volume = +(startV*(1-t)).toFixed(3);
+        if(i>=steps){ clearInterval(iv); try{ bgMusic.pause(); }catch(_){} }
+      }, fadeDur/steps);
+    }
+    // Lecture jingle
+    failJingle.currentTime = 0;
+    failJingle.volume = 1; // volume plein au départ
+    const playPromise = failJingle.play();
+    if(playPromise && typeof playPromise.then==='function') playPromise.catch(()=>{});
+    const WINDOW_MS = 7000; // durée d'affichage overlay
+    const FADE_MS = 600;    // durée du fade-out jingle
+    // Programmation du fade-out vers la fin
+    setTimeout(()=>{
+      if(!failJingle || failJingle.paused) return;
+      const startVol = failJingle.volume;
+      const steps =  Math.max(10, Math.round(FADE_MS/40));
+      let k=0;
+      const ivFade = setInterval(()=>{
+        k++;
+        const t = k/steps;
+        failJingle.volume = +(startVol * (1-t)).toFixed(3);
+        if(k>=steps){
+          clearInterval(ivFade);
+          try { failJingle.pause(); } catch(_){}
+          failJingle.volume = 0;
+        }
+      }, FADE_MS/steps);
+    }, WINDOW_MS - FADE_MS);
+    // Fin de séquence (après fenêtre), reprise musique
+    setTimeout(()=>{
+      failJinglePlaying = false;
+      if(resumeNeeded && bgMusic && !bgMuted){
+        try { bgMusic.currentTime = (bgMusic.currentTime||0); bgMusic.play().catch(()=>{}); } catch(_){}
+        // Remet volume progressivement
+        const target = BG_BASE_VOLUME;
+        bgMusic.volume = 0;
+        const steps = 14;
+        let j=0; const iv2=setInterval(()=>{ j++; const t=j/steps; bgMusic.volume = +(target*t).toFixed(3); if(j>=steps){ clearInterval(iv2); bgMusic.volume=target; } }, 40);
+      }
+    }, WINDOW_MS);
+  }
+
+  function playSuccessJingle(){
+    if(!successJingle || successJinglePlaying) return;
+    successJinglePlaying = true;
+    let resumeNeeded = false;
+    if(bgMusic && bgMusicStarted && !bgMuted){
+      resumeNeeded = true;
+      // Fade out plus doux pour succès
+      const startV = bgMusic.volume;
+      const fadeDur = 500;
+      const steps = 14;
+      let i=0; const iv=setInterval(()=>{
+        i++; const t=i/steps; bgMusic.volume = +(startV*(1-t)).toFixed(3);
+        if(i>=steps){ clearInterval(iv); try{ bgMusic.pause(); }catch(_){} }
+      }, fadeDur/steps);
+    }
+    successJingle.currentTime = 0;
+    successJingle.volume = 1;
+    const playPromise = successJingle.play();
+    if(playPromise && typeof playPromise.then==='function') playPromise.catch(()=>{});
+    const WINDOW_MS = 7000; // même durée overlay
+    const FADE_MS = 800; // fade-out un peu plus long
+    setTimeout(()=>{
+      if(!successJingle || successJingle.paused) return;
+      const startVol=successJingle.volume; const steps=Math.max(10,Math.round(FADE_MS/45)); let k=0;
+      const ivFade=setInterval(()=>{ k++; const t=k/steps; successJingle.volume = +(startVol*(1-t)).toFixed(3); if(k>=steps){ clearInterval(ivFade); try{ successJingle.pause(); }catch(_){} successJingle.volume=0; } }, FADE_MS/steps);
+    }, WINDOW_MS-FADE_MS);
+    setTimeout(()=>{
+      successJinglePlaying = false;
+      if(resumeNeeded && bgMusic && !bgMuted){
+        try { bgMusic.currentTime = (bgMusic.currentTime||0); bgMusic.play().catch(()=>{}); } catch(_){}
+        const target = BG_BASE_VOLUME; bgMusic.volume=0; const steps=16; let j=0; const iv2=setInterval(()=>{ j++; const t=j/steps; bgMusic.volume=+(target*t).toFixed(3); if(j>=steps){ clearInterval(iv2); bgMusic.volume=target; } }, 40);
+      }
+    }, WINDOW_MS);
   }
 
 })(jQuery);
