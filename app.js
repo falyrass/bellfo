@@ -99,6 +99,7 @@
     state=GameState.Preparing;
     setStatus(`Observation: mémorisez les valeurs (${PREP_SECONDS} s).`,'warn');
     showNumbers(true);
+  applyRevealSpiral();
     lockBoardInteractions(true);
     prepRemaining=PREP_SECONDS; gameRemaining=GAME_SECONDS; updateTimersUI();
   updateMainButton();
@@ -297,6 +298,21 @@
     $('#board').append($ov);
   }
   function removeGameCountdown(){ $('#board .prep-overlay.game').remove(); }
+
+  // ===== Animation spiral reveal =====
+  function applyRevealSpiral(){ // renommé conceptuellement: maintenant flip 3D
+    const $nodes = $('#board .node');
+    $nodes.each(function(i){
+      const el = this;
+      el.classList.remove('reveal-spiral','reveal-zoom','reveal-flip3d','reveal-stagger');
+      // force reflow to restart animation if rejoué
+      void el.offsetWidth;
+      el.style.setProperty('--reveal-order', i.toString());
+      el.classList.add('reveal-flip3d','reveal-stagger');
+    });
+  }
+
+  // (centrage/fixation retiré)
 
   function bindEvents(){
     $('#board').on('click','.node',onNodeClick);

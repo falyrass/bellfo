@@ -89,6 +89,17 @@ body {
 
 .node.hidden-number { color: transparent; text-shadow: 0 0 12px rgba(255,255,255,0.12); }
 
+/* ===== Animation révélation flip 3D (600ms) ===== */
+.reveal-flip3d { animation: revealFlip3D .6s cubic-bezier(.62,.02,.34,1.02) forwards; transform-style:preserve-3d; }
+@keyframes revealFlip3D {
+  0% { opacity:0; transform:rotateX(90deg); }
+  40% { opacity:1; }
+  70% { transform:rotateX(-14deg); }
+  100% { transform:rotateX(0deg); opacity:1; }
+}
+/* Stagger utilitaire */
+.reveal-stagger { animation-delay: calc(var(--reveal-order) * 18ms); }
+
 .node.locked { cursor: not-allowed; filter: grayscale(0.4) brightness(0.8); }
 .node.invalid { animation: shake 180ms linear 1; box-shadow: 0 0 0 2px var(--danger), 0 0 18px rgba(255,107,107,0.35); }
 .node.active { border-color: #6b9af2; background: linear-gradient(180deg, #3b4ea5, #293057); }
