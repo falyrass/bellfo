@@ -12,7 +12,7 @@
 
   const ROWS = 11;
   const COLS = 8;
-  const PREP_SECONDS = 45;
+  const PREP_SECONDS = 1;
   const GAME_SECONDS = 60;
 
   const GameState = Object.freeze({ Idle: 'idle', Preparing: 'preparing', Playing: 'playing', Ended: 'ended' });
@@ -49,14 +49,17 @@
     } catch(_) { /* ignore */ }
   }
 
-  // Met à jour l'état des boutons (Start / Reset)
-  function refreshButtons(){
-  // Start (Commencer) visible seulement en état Idle
-  const showStart = (state === GameState.Idle);
-  $('#start-btn').toggle(showStart);
-  // Reset désactivé seulement pendant préparation ou jeu, actif en Idle et Ended
-  const resetDisabled = (state === GameState.Preparing || state === GameState.Playing);
-  $('#reset-btn').prop('disabled', resetDisabled);
+  // Bouton principal unique (Nouvelle partie / Commencer)
+  let buttonPhase = 'new';
+  function updateMainButton(){
+    const $b = $('#main-btn');
+    if(!$b.length) return;
+    if(state === GameState.Preparing || state === GameState.Playing){
+      $b.hide();
+    } else {
+      $b.show();
+      $b.text(buttonPhase === 'new' ? 'Nouvelle partie' : 'Commencer');
+    }
   }
 
   const range = (n)=>Array.from({length:n},(_,i)=>i);
@@ -98,7 +101,7 @@
     showNumbers(true);
     lockBoardInteractions(true);
     prepRemaining=PREP_SECONDS; gameRemaining=GAME_SECONDS; updateTimersUI();
-    refreshButtons();
+  updateMainButton();
   // Nettoie overlay précédent s'il existe (pas d'affichage géant avant <=5s)
   $('#board .prep-overlay').remove();
     prepTimer=setInterval(()=>{ 
@@ -118,9 +121,10 @@
     showNumbers(true);
     lockBoardInteractions(false);
     gameRemaining=GAME_SECONDS; updateTimersUI();
-    refreshButtons();
+  updateMainButton();
   // Affiche "GO" juste après la phase de préparation
   showGoMessage();
+  updateClickableHighlights();
     gameTimer=setInterval(()=>{ 
       gameRemaining--; 
       updateTimersUI(); 
@@ -137,6 +141,7 @@
     state=GameState.Ended;
     clearAllTimers();
     lockBoardInteractions(true);
+  clearClickable();
     // Si le joueur n'a pas atteint la dernière ligne, score forcé à 0 avant toute évaluation
     if(!reached){
       playerScore = 0;
@@ -149,7 +154,8 @@
     for(const p of bestPath) p.$el.addClass('optimal');
     if(reached) setStatus(`${msg||'Arrivée atteinte !'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`);
     else setStatus(`${msg||'Partie terminée.'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`,'warn');
-    refreshButtons(); // Réactiver les boutons en fin de partie
+  buttonPhase = 'new';
+  updateMainButton();
   // Evaluation étoiles (7s)
   try { createStarEvaluation(playerScore, bestScore); } catch(_) { /* ignore */ }
   }
@@ -187,6 +193,7 @@
     }
   // Son joué pour chaque point (y compris le premier) depuis le cache
   playClickSound();
+  if(state===GameState.Playing && !isBottomRow(p.row)) updateClickableHighlights();
   }
 
   function computeOptimalPath(){
@@ -218,10 +225,10 @@
     generateGrid(); assignValues(); resetTimersUI();
     setStatus('Cliquez sur Commencer pour lancer une nouvelle partie.');
     showNumbers(false); lockBoardInteractions(true);
+  clearClickable();
   removePrepCountdown();
-    refreshButtons();
+  updateMainButton();
   }
-  function startGame(){ if(state===GameState.Preparing||state===GameState.Playing) return; clearPathHighlights(); startPreparationPhase(); }
 
   // Crée et affiche l'overlay d'évaluation avec étoiles selon l'écart de score
   function createStarEvaluation(score, optimal){
@@ -238,7 +245,7 @@
     for(let i=0;i<3;i++){ $starsWrap.append(starSVG(i<stars, i*260)); }
     const titleMap={0:'Aucun éclat',1:'Peut mieux faire',2:'Très bien',3:'Parfait !'};
     const $title=$('<h2 class="star-eval-title">').text(titleMap[stars]);
-    const $sub=$('<p class="star-eval-sub">').text(stars===3 ? 'Chemin optimal atteint.' : 'Écart avec l\'optimal: '+diff);
+  const $sub=$('<p class="star-eval-sub">').text(stars===3 ? 'Chemin optimal atteint.' : '');
     const $diff=$('<p class="star-eval-diff">').text('Score: '+score+' | Optimal: '+optimal);
     $box.append($starsWrap,$title,$sub,$diff);
     $overlay.append($box);
@@ -262,6 +269,25 @@
   setTimeout(()=>{ $ov.remove(); },1500);
   }
 
+  // ====== Mise en surbrillance des points cliquables ======
+  function clearClickable(){ $('#board .node.clickable').removeClass('clickable'); }
+  function updateClickableHighlights(){
+    clearClickable();
+    if(state!==GameState.Playing) return;
+    // Si aucun point choisi encore: tous les points de la première ligne
+    if(playerPath.length===0){
+      for(let c=0;c<COLS;c++){ grid[0][c].$el.addClass('clickable'); }
+      return;
+    }
+    const last = playerPath[playerPath.length-1];
+    if(isBottomRow(last.row)) return; // terminé
+    const nextRow = last.row + 1;
+    for(let dc=-1; dc<=1; dc++){
+      const nc = last.col + dc; if(nc<0||nc>=COLS) continue;
+      const point = grid[nextRow][nc]; if(point) point.$el.addClass('clickable');
+    }
+  }
+
   // === Compte à rebours final de la phase de jeu (5 dernières secondes) ===
   function showGameCountdown(n){
     removeGameCountdown();
@@ -272,18 +298,34 @@
   }
   function removeGameCountdown(){ $('#board .prep-overlay.game').remove(); }
 
-  function bindEvents(){ $('#board').on('click','.node',onNodeClick); $('#start-btn').on('click',startGame); $('#reset-btn').on('click',()=> resetGame()); }
+  function bindEvents(){
+    $('#board').on('click','.node',onNodeClick);
+    $(document).on('click','#main-btn',onMainButtonClick);
+  }
+
+  function onMainButtonClick(){
+    if(state !== GameState.Idle) return;
+    if(buttonPhase === 'new'){
+      // Génère une nouvelle grille et passe à phase Commencer
+      resetGame();
+      buttonPhase = 'start';
+      updateMainButton();
+    } else if(buttonPhase === 'start') {
+      startPreparationPhase();
+    }
+  }
 
   $(function(){
     preloadClickSound();
     bindEvents();
     resetGame();
     initRulesModal();
+  // Bouton unique: d'abord "Nouvelle partie" -> clique régénère + passe à "Commencer" -> lance observation
     const $legend=$('<div class="legend">')
       .append('<span class="badge"><span class="dot player"></span> Votre chemin</span>')
       .append('<span class="badge"><span class="dot opt"></span> Chemin optimal</span>');
     $('.board').after($legend);
-    refreshButtons();
+  updateMainButton();
   });
 
   // ====== Règles / Modale ======
