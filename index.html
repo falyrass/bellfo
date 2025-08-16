@@ -7,31 +7,20 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-  <div class="app">
-      <header class="app-header">
-        <h1>Chemin minimal</h1>
-      </header>
+    <!-- Application -->
+    <div class="app">
+      <!-- En-tête -->
+      <header class="app-header"><h1>Chemin minimal</h1></header>
 
+      <!-- HUD: timers, scores, actions -->
       <section class="hud" role="region" aria-label="Tableau de bord">
         <div class="hud-group timers">
-          <div class="hud-item">
-            <span class="label">Observation</span>
-            <span id="prep-timer" class="value" aria-live="polite">00:45</span>
-          </div>
-          <div class="hud-item">
-            <span class="label">Jeu</span>
-            <span id="game-timer" class="value" aria-live="polite">01:00</span>
-          </div>
+          <div class="hud-item"><span class="label">Observation</span><span id="prep-timer" class="value" aria-live="polite">00:45</span></div>
+          <div class="hud-item"><span class="label">Jeu</span><span id="game-timer" class="value" aria-live="polite">01:00</span></div>
         </div>
         <div class="hud-group scores">
-          <div class="hud-item">
-            <span class="label">Score</span>
-            <span id="score" class="value" aria-live="polite">0</span>
-          </div>
-          <div class="hud-item">
-            <span class="label">Score optimal</span>
-            <span id="optimal-score" class="value" aria-live="polite">—</span>
-          </div>
+          <div class="hud-item"><span class="label">Score</span><span id="score" class="value" aria-live="polite">0</span></div>
+          <div class="hud-item"><span class="label">Score optimal</span><span id="optimal-score" class="value" aria-live="polite">—</span></div>
         </div>
         <div class="hud-group actions">
           <button id="main-btn" class="btn primary" type="button">Nouvelle partie</button>
@@ -39,37 +28,32 @@
         </div>
       </section>
 
+      <!-- Zone de statut -->
       <section id="status" class="status" aria-live="polite"></section>
 
-      <main id="board" class="board hidden-values" role="group" aria-label="Terrain du jeu">
-        <!-- Lignes générées dynamiquement -->
-      </main>
+      <!-- Plateau (généré dynamiquement en JS) -->
+      <main id="board" class="board hidden-values" role="group" aria-label="Terrain du jeu"></main>
 
+      <!-- Pied de page -->
       <footer class="app-footer">
-        <small>
-          Règle: partez de la ligne 1 (8 colonnes), puis allez à la ligne suivante dans la même colonne ou une colonne adjacente. Terminez à la ligne 11 (8 colonnes).
-        </small>
-        <div class="footer-links">
-          <button type="button" id="show-rules-btn" class="link-btn">Voir les règles</button>
-        </div>
+        <small>Règle: partez de la ligne 1 puis descendez ligne par ligne (même colonne ou adjacente) jusqu'à la ligne 11.</small>
+        <div class="footer-links"><button type="button" id="show-rules-btn" class="link-btn">Voir les règles</button></div>
       </footer>
-      
+
       <!-- Modale des règles -->
       <div id="rules-modal" class="rules-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rules-title">
         <div class="rules-dialog">
           <h2 id="rules-title">Règles du jeu</h2>
           <div class="rules-body">
-            <p><strong>Objectif :</strong> Trouver un chemin du haut vers le bas qui donne le score le plus petit possible.</p>
-            <p>Le plateau a 11 lignes et 8 colonnes de nombres cachés.</p>
+            <p><strong>Objectif :</strong> Minimiser la somme des différences entre nombres consécutifs du chemin.</p>
+            <p>Grille: 11 lignes × 8 colonnes de nombres cachés.</p>
             <ul>
-              <li>Tu commences en haut (ligne 1) en choisissant n'importe quel nombre.</li>
-              <li>À chaque nouvelle ligne, tu peux aller tout droit, en diagonale à gauche ou à droite.</li>
-              <li>Ton score augmente de la différence entre le nouveau nombre et le précédent.</li>
-              <li>Le premier nombre ne compte pas dans le score.</li>
-              <li>Si tu n'arrives pas jusqu'en bas, ton score devient 0.</li>
+              <li>Départ: n'importe quel point de la première ligne.</li>
+              <li>Déplacement: même colonne ou colonne adjacente ligne suivante.</li>
+              <li>Score: +|nouveau - précédent| (premier point gratuit).</li>
+              <li>Chemin incomplet (pas dernière ligne) = score 0.</li>
             </ul>
-            <p><strong>But :</strong> Arriver tout en bas avec la plus petite somme de différences.</p>
-            <p>À la fin, des étoiles s'affichent pour te montrer ta performance.</p>
+            <p>Compare ton score au chemin optimal et regarde les étoiles.</p>
           </div>
           <div class="rules-actions">
             <label class="no-show"><input type="checkbox" id="rules-hide-checkbox"> Ne plus afficher</label>
@@ -79,7 +63,7 @@
       </div>
     </div>
 
-  <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"></script>
-  <script src="app.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

@@ -1,10 +1,8 @@
 /*
-  Chemin minimal — Graphe pondéré (Single Player)
-  HTML/CSS/JS/jQuery (slim)
-  - 11 lignes, 8 colonnes
-  - 45s observation, 60s de jeu
-  - Déplacement: N -> N+1, même colonne ou adjacente
-  - Score: premier = valeur; puis +|diff|
+  Bellfo — Jeu de chemin minimal (single player)
+  Règle: partir de la première ligne, descendre ligne par ligne (même colonne ou adjacente) jusqu'en bas.
+  Score: somme des différences absolues entre valeurs successives (premier point gratuit).
+  Objectif: minimiser le score (affichage du chemin optimal à la fin + évaluation étoiles).
 */
 
 (function($) {
@@ -12,8 +10,8 @@
 
   const ROWS = 11;
   const COLS = 8;
-  const PREP_SECONDS = 45;
-  const GAME_SECONDS = 60;
+  const PREP_SECONDS = 45;  // Durée phase d'observation (secondes)
+  const GAME_SECONDS = 60;  // Durée phase de jeu (secondes)
 
   const GameState = Object.freeze({ Idle: 'idle', Preparing: 'preparing', Playing: 'playing', Ended: 'ended' });
 
@@ -27,18 +25,16 @@
   let prepTimer = null, gameTimer = null;
   let prepRemaining = PREP_SECONDS, gameRemaining = GAME_SECONDS;
   let soundCtx = null;
-  // Audio préchargé
   const CLICK_SOUND_URL = 'assets/sounds/pop-cartoon-328167.mp3';
   const HIGH_DIFF_SOUND_URL = 'assets/sounds/mixkit-cartoon-toy-whistle-616.mp3';
-  let clickAudio = null; // instance principale
-  let highDiffAudio = null; // son pour grands deltas
-  // Musique de fond
-  const BG_MUSIC_URL = 'assets/sounds/happy-relaxing-loop-275536.mp3'; // fichier fourni (déplacé sous sounds)
-  const FAIL_JINGLE_URL = 'assets/sounds/panto-clowns-jingle-271283.mp3'; // jingle échec
-  const SUCCESS_JINGLE_URL = 'assets/sounds/brass-fanfare-with-timpani-and-winchimes-reverberated-146260.mp3'; // jingle succès parfait
+  let clickAudio = null;          // Son de clic (petit déplacement)
+  let highDiffAudio = null;       // Son alternatif pour grand delta
+  const BG_MUSIC_URL = 'assets/sounds/happy-relaxing-loop-275536.mp3';
+  const FAIL_JINGLE_URL = 'assets/sounds/panto-clowns-jingle-271283.mp3';
+  const SUCCESS_JINGLE_URL = 'assets/sounds/brass-fanfare-with-timpani-and-winchimes-reverberated-146260.mp3';
   let bgMusic = null;
   let bgMusicStarted = false;
-  const BG_BASE_VOLUME = 0.35;
+  const BG_BASE_VOLUME = 0.35;    // Volume de base de la musique de fond
   let bgMuted = false;
   let failJingle = null;
   let failJinglePlaying = false;
@@ -53,14 +49,13 @@
       highDiffAudio = new Audio(HIGH_DIFF_SOUND_URL);
       highDiffAudio.preload = 'auto';
       highDiffAudio.load();
-      // Pour permettre plusieurs lectures rapprochées sans attendre la fin,
-      // on clone le node (sinon currentTime=0 peut être bloqué si en cours de lecture)
+  // Lecture silencieuse initiale pour débloquer un éventuel futur play rapide
       const node = clickAudio.cloneNode();
       node.play().catch(()=>{});
     } catch(_) { /* ignore */ }
   }
 
-  // Lecture du son de clic (fonction manquante qui causait une erreur JS stoppant la mise à jour des surbrillances)
+  // Lecture d'un clic (clonage pour autoriser plusieurs lectures simultanées)
   function playClickSound(){
     if(!clickAudio) return;
     try {
@@ -79,18 +74,18 @@
   }
 
   function playMoveSound(delta){
-    if(delta==null){ // premier point
+  if(delta==null){ // Premier point (pas de delta)
       playClickSound();
       return;
     }
-    if(delta > 40){
+    if(delta > 30){
       playHighDiffSound();
     } else {
       playClickSound();
     }
   }
 
-  // Bouton principal unique (Nouvelle partie / Commencer)
+  // Gestion du bouton principal (cycle nouvelle partie / commencer)
   let buttonPhase = 'new';
   function updateMainButton(){
     const $b = $('#main-btn');
@@ -136,7 +131,7 @@
   function assignValues(){ const total=ROWS*COLS; usedValues=shuffle(range(total).map(i=>i+1)); let k=0; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const p=grid[r][c]; const v=usedValues[k++]; p.value=v; p.$el.text(String(v)); } } }
 
   function clearAllTimers(){ if(prepTimer){clearInterval(prepTimer);prepTimer=null;} if(gameTimer){clearInterval(gameTimer);gameTimer=null;} }
-  function startPreparationPhase(){
+  function startPreparationPhase(){ // Lance la phase d'observation
     state=GameState.Preparing;
     setStatus(`Observation: mémorisez les valeurs (${PREP_SECONDS} s).`,'warn');
     showNumbers(true);
@@ -144,7 +139,6 @@
     lockBoardInteractions(true);
     prepRemaining=PREP_SECONDS; gameRemaining=GAME_SECONDS; updateTimersUI();
   updateMainButton();
-  // Nettoie overlay précédent s'il existe (pas d'affichage géant avant <=5s)
   $('#board .prep-overlay').remove();
     prepTimer=setInterval(()=>{ 
       prepRemaining--; 
@@ -157,15 +151,14 @@
       }
     },1000);
   }
-  function startPlayingPhase(){
+  function startPlayingPhase(){ // Lance la phase de jeu
     state=GameState.Playing;
     setStatus('C’est parti ! Sélectionnez un point de la ligne 1.','ok');
     showNumbers(true);
     lockBoardInteractions(false);
     gameRemaining=GAME_SECONDS; updateTimersUI();
   updateMainButton();
-  // Affiche "GO" juste après la phase de préparation
-  showGoMessage();
+  showGoMessage(); // Indication visuelle de départ
   updateClickableHighlights();
     gameTimer=setInterval(()=>{ 
       gameRemaining--; 
@@ -184,7 +177,7 @@
     clearAllTimers();
     lockBoardInteractions(true);
   clearClickable();
-    // Si le joueur n'a pas atteint la dernière ligne, score forcé à 0 avant toute évaluation
+  // Si la dernière ligne n'est pas atteinte: score forcé à 0
     if(!reached){
       playerScore = 0;
       updateScoreUI();
@@ -198,7 +191,7 @@
     else setStatus(`${msg||'Partie terminée.'} Votre score: ${playerScore}. Score optimal: ${bestScore}.`,'warn');
   buttonPhase = 'new';
   updateMainButton();
-  // Evaluation étoiles (7s)
+  // Lance l'évaluation étoiles (overlay temporaire)
   try { createStarEvaluation(playerScore, bestScore); } catch(_) { /* ignore */ }
   }
 
@@ -206,8 +199,7 @@
   function invalidClickFeedback($el){ $el.addClass('invalid'); beep(220,0.06,0.03); setTimeout(()=> $el.removeClass('invalid'),220); }
   function addToPath(p){
     p.$el.addClass('active');
-    if(playerPath.length===0){
-      // Premier point: pas de valeur ajoutée au score
+  if(playerPath.length===0){
       playerPath.push(p);
       updateScoreUI();
       p.$el.addClass('path');
@@ -218,7 +210,7 @@
       playerPath.push(p);
       updateScoreUI();
       p.$el.addClass('path');
-      // Animation visuelle du delta de score
+  // Effet visuel du delta de score
       try {
         const off = p.$el.offset();
         const $board = $('#board');
@@ -233,14 +225,14 @@
         }
       } catch(_) { /* ignore */ }
     }
-  // Son conditionnel selon delta (si premier point delta=null)
+  // Son conditionnel selon le delta
   playMoveSound(playerPath.length<2?null:Math.abs(p.value - playerPath[playerPath.length-2].value));
   if(state===GameState.Playing && !isBottomRow(p.row)) updateClickableHighlights();
   }
 
   function computeOptimalPath(){
-    const dp=Array.from({length:ROWS},()=>Array(COLS).fill(null));
-    // Base: le premier point ne coûte rien (score basé uniquement sur les différences)
+  const dp=Array.from({length:ROWS},()=>Array(COLS).fill(null)); // DP[r][c] = {cost, from}
+  // Base: coût initial 0 (premier point gratuit)
     for(let c=0;c<COLS;c++) dp[0][c] = { cost: 0, from: null };
     for(let r=1;r<ROWS;r++){
       for(let c=0;c<COLS;c++){
@@ -271,7 +263,7 @@
   removePrepCountdown();
   removeGameCountdown();
   $('.star-eval-overlay').remove();
-  // Stop jingles & remettre musique de fond
+  // Arrêt éventuel des jingles + reprise musique si active
   try {
     if(failJingle && failJinglePlaying){ failJingle.pause(); failJingle.currentTime = 0; failJinglePlaying = false; }
     if(successJingle && successJinglePlaying){ successJingle.pause(); successJingle.currentTime = 0; successJinglePlaying = false; }
@@ -283,14 +275,13 @@
   updateMainButton();
   }
 
-  // Crée et affiche l'overlay d'évaluation avec étoiles selon l'écart de score
+  // Overlay d'évaluation (étoiles + jingles)
   function createStarEvaluation(score, optimal){
-    if(optimal == null) return; // sécurité
-  // Différence absolue entre le score joueur et l'optimal
+    if(optimal == null) return;
   const diff = Math.abs(score - optimal);
     let stars=0;
     if(diff===0) stars=3; else if(diff>=1 && diff<=30) stars=2; else if(diff>=31 && diff<=60) stars=1; else stars=0;
-    // Construire overlay
+  // Construction overlay
     const $overlay = $('<div class="star-eval-overlay" aria-hidden="true">');
     const $box = $('<div class="star-eval-box">');
     const $starsWrap = $('<div class="star-eval-stars" role="img" aria-label="Évaluation: '+stars+' étoile(s)">');
@@ -303,9 +294,9 @@
     $box.append($starsWrap,$title,$sub,$diff);
     $overlay.append($box);
     $('body').append($overlay);
-  // Retrait après 7s
+  // Suppression programmée
   setTimeout(()=>{ $overlay.remove(); }, 7000);
-  // Jingles spéciaux
+  // Lecture jingles selon performance
   try {
     if(stars===3){
       playSuccessJingle();
@@ -315,7 +306,7 @@
   } catch(_) { /* ignore */ }
   }
 
-  // === Overlays de préparation ===
+  // Overlays (compteurs + GO)
   function showPrepCountdown(n){
     removePrepCountdown();
     if(n<=0) return;
@@ -330,18 +321,18 @@
   setTimeout(()=>{ $ov.remove(); },1500);
   }
 
-  // ====== Mise en surbrillance des points cliquables ======
+  // Mise en surbrillance des points cliquables
   function clearClickable(){ $('#board .node.clickable').removeClass('clickable'); }
   function updateClickableHighlights(){
     clearClickable();
     if(state!==GameState.Playing) return;
-    // Si aucun point choisi encore: tous les points de la première ligne
+  // Aucun point choisi: tous les points de la première ligne
     if(playerPath.length===0){
       for(let c=0;c<COLS;c++){ grid[0][c].$el.addClass('clickable'); }
       return;
     }
     const last = playerPath[playerPath.length-1];
-    if(isBottomRow(last.row)) return; // terminé
+  if(isBottomRow(last.row)) return; // Chemin terminé
     const nextRow = last.row + 1;
     for(let dc=-1; dc<=1; dc++){
       const nc = last.col + dc; if(nc<0||nc>=COLS) continue;
@@ -349,7 +340,7 @@
     }
   }
 
-  // === Compte à rebours final de la phase de jeu (5 dernières secondes) ===
+  // Compte à rebours final (5 dernières secondes)
   function showGameCountdown(n){
     removeGameCountdown();
     if(n<=0) return;
@@ -364,7 +355,7 @@
 
   // (centrage/fixation retiré)
 
-  function bindEvents(){
+  function bindEvents(){ // Écouteurs principaux
     $('#board').on('click','.node',onNodeClick);
     $(document).on('click','#main-btn',onMainButtonClick);
   $(document).on('click','#music-toggle',onMusicToggleClick);
@@ -373,7 +364,7 @@
   function onMainButtonClick(){
   if(state !== GameState.Idle && state !== GameState.Ended) return;
     if(buttonPhase === 'new'){
-      // Génère une nouvelle grille et passe à phase Commencer
+  // Préparation nouvelle grille -> phase "Commencer"
       resetGame();
       buttonPhase = 'start';
       updateMainButton();
@@ -389,8 +380,7 @@
     resetGame();
     initRulesModal();
   initBackgroundMusic();
-  // La musique démarrera au clic sur Commencer
-  // Bouton unique: d'abord "Nouvelle partie" -> clique régénère + passe à "Commencer" -> lance observation
+  // La musique démarre lors du clic sur Commencer
     const $legend=$('<div class="legend">')
       .append('<span class="badge"><span class="dot player"></span> Votre chemin</span>')
       .append('<span class="badge"><span class="dot opt"></span> Chemin optimal</span>');
@@ -398,7 +388,7 @@
   updateMainButton();
   });
 
-  // ====== Règles / Modale ======
+  // Modale règles
   function initRulesModal(){
     const KEY='hideRules';
     const hide = localStorage.getItem(KEY)==='1';
@@ -412,7 +402,7 @@
     if(!hide) showRules();
   }
 
-  // ===== Musique de fond =====
+  // Musique de fond + jingles
   function initBackgroundMusic(){
     try {
       bgMuted = localStorage.getItem('bgMuted') === '1';
@@ -420,13 +410,13 @@
       bgMusic.loop = true;
       bgMusic.preload = 'auto';
       bgMusic.volume = bgMuted ? 0 : BG_BASE_VOLUME;
-      // Préchargement silencieux (certains navigateurs n'autoriseront pas play sans interaction)
+  // Préchargement silencieux
       bgMusic.load();
-  // Précharge jingle échec
+  // Préchargement jingle échec
   failJingle = new Audio(FAIL_JINGLE_URL);
   failJingle.preload = 'auto';
   failJingle.load();
-  // Précharge jingle succès
+  // Préchargement jingle succès
   successJingle = new Audio(SUCCESS_JINGLE_URL);
   successJingle.preload = 'auto';
   successJingle.load();
@@ -482,15 +472,15 @@
     }, duration/steps);
   }
 
-  // ===== Jingle échec (0 étoile) =====
+  // Jingle échec (0 étoile)
   function playFailureJingle(){
     if(!failJingle || failJinglePlaying) return;
     failJinglePlaying = true;
-    // Baisse / pause musique de fond temporairement si active et non mutée
+  // Pause/fade musique de fond si active
     let resumeNeeded = false;
     if(bgMusic && bgMusicStarted && !bgMuted){
       resumeNeeded = true;
-      // Fade out manuel rapide puis pause
+  // Fade out rapide
       const startV = bgMusic.volume;
       const fadeDur = 400;
       const steps = 12;
@@ -502,14 +492,13 @@
         if(i>=steps){ clearInterval(iv); try{ bgMusic.pause(); }catch(_){} }
       }, fadeDur/steps);
     }
-    // Lecture jingle
+  // Lecture jingle
     failJingle.currentTime = 0;
     failJingle.volume = 1; // volume plein au départ
     const playPromise = failJingle.play();
     if(playPromise && typeof playPromise.then==='function') playPromise.catch(()=>{});
-    const WINDOW_MS = 7000; // durée d'affichage overlay
-    const FADE_MS = 600;    // durée du fade-out jingle
-    // Programmation du fade-out vers la fin
+  const WINDOW_MS = 7000; // Durée totale
+  const FADE_MS = 600;    // Durée fade-out jingle
     setTimeout(()=>{
       if(!failJingle || failJingle.paused) return;
       const startVol = failJingle.volume;
@@ -526,7 +515,7 @@
         }
       }, FADE_MS/steps);
     }, WINDOW_MS - FADE_MS);
-    // Fin de séquence (après fenêtre), reprise musique
+  // Reprise musique après fenêtre
     setTimeout(()=>{
       failJinglePlaying = false;
       if(resumeNeeded && bgMusic && !bgMuted){
@@ -540,13 +529,13 @@
     }, WINDOW_MS);
   }
 
-  function playSuccessJingle(){
+  function playSuccessJingle(){ // Jingle succès (3 étoiles)
     if(!successJingle || successJinglePlaying) return;
     successJinglePlaying = true;
     let resumeNeeded = false;
     if(bgMusic && bgMusicStarted && !bgMuted){
       resumeNeeded = true;
-      // Fade out plus doux pour succès
+  // Fade out doux
       const startV = bgMusic.volume;
       const fadeDur = 500;
       const steps = 14;
@@ -559,8 +548,8 @@
     successJingle.volume = 1;
     const playPromise = successJingle.play();
     if(playPromise && typeof playPromise.then==='function') playPromise.catch(()=>{});
-    const WINDOW_MS = 7000; // même durée overlay
-    const FADE_MS = 800; // fade-out un peu plus long
+  const WINDOW_MS = 7000; // Durée totale
+  const FADE_MS = 800;    // Fade-out plus long
     setTimeout(()=>{
       if(!successJingle || successJingle.paused) return;
       const startVol=successJingle.volume; const steps=Math.max(10,Math.round(FADE_MS/45)); let k=0;
