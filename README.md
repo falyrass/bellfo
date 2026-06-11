@@ -1,6 +1,8 @@
 # Chemin minimal — Graphe pondéré (Solo)
 
-Jeu solo de chemin à score minimal sur un graphe pondéré.
+Jeu solo de chemin à score minimal sur un graphe pondéré. Il s'agit d'un projet algorithmique.
+
+**Lien de test :** [https://falyrass.github.io/bellfo/](https://falyrass.github.io/bellfo/)
 
 - 11 lignes, 8 colonnes par ligne
 - Observation 45 s, jeu 60 s
